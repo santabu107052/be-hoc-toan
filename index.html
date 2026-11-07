@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bé Tự Học Toán Tách Số (Bù 10)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <style>/* Animation cho mascot */
+@keyframes cuteWiggle {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-8deg); }
+    75% { transform: rotate(8deg); }
+}
+
+.mascot-wiggle {
+    animation: cuteWiggle 0.4s ease infinite;
+}
+
+/* Thẻ số kéo thả */
+.draggable-pill {
+    touch-action: none;
+    user-select: none;
+    transition: all 0.15s ease;
+}
+
+.draggable-pill:hover {
+    transform: translateY(-2px);
+}
+
+.draggable-pill:active {
+    transform: scale(0.92);
+}
+
+.dragging {
+    opacity: 0.4;
+    transform: scale(0.9);
+}
+
+/* Hiệu ứng khi kéo vào ô drop */
+.drop-hover {
+    background-color: #fef08a !important; /* amber-200 */
+    border-color: #f59e0b !important;
+    transform: scale(1.08);
+}
+
+/* Ô đã được điền */
+.slot-filled {
+    border-style: solid !important;
+    background-color: #f0fdf4 !important;
+    border-color: #22c55e !important;
+    color: #15803d !important;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.slot-wrong {
+    border-color: #ef4444 !important;
+    background-color: #fef2f2 !important;
+    color: #b91c1c !important;
+    animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+}
+</style>
+    <style>
+        body { font-family: 'Nunito', sans-serif; touch-action: manipulation; }
+    </style>
+</head>
+<body class="bg-amber-50 min-h-screen flex flex-col items-center justify-between p-3 sm:p-5 select-none">
+
+    <!-- THANH ĐIỀU KHIỂN ÂM THANH & NHẠC NỀN TOÀN CỤC (TOP BAR) -->
+    <div class="w-full max-w-2xl flex justify-between items-center mb-1 px-2">
+        <div class="flex items-center gap-1.5 text-xs font-black text-amber-800">
+            <span>🦊 Cùng bé vui học toán</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <!-- Nút bật/tắt Giọng đọc -->
+            <button id="toggle-voice-btn" onclick="toggleVoice()" class="flex items-center gap-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition active:scale-95">
+                <span id="voice-icon">🔊</span>
+                <span id="voice-label" class="hidden sm:inline">Giọng đọc: Bật</span>
+            </button>
+            <!-- Nút bật/tắt Nhạc nền -->
+            <button id="toggle-bgm-btn" onclick="toggleBGM()" class="flex items-center gap-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition active:scale-95">
+                <span id="bgm-icon">🎵</span>
+                <span id="bgm-label" class="hidden sm:inline">Nhạc nền: Bật</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 1. MÀN HÌNH CHỌN SỐ LƯỢNG BÀI (START SCREEN) -->
+    <div id="screen-start" class="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border-4 border-amber-300 flex flex-col items-center text-center my-auto transition-all duration-300">
+        <div class="text-6xl sm:text-7xl mb-3 animate-bounce cursor-pointer" onclick="speakText('Chào bé! Hôm nay bé muốn thử sức với bao nhiêu bài toán?')">🦊</div>
+        <h1 class="text-2xl sm:text-3xl font-black text-amber-950 mb-2">Cộng Nhanh Bù 10</h1>
+        <p class="text-sm sm:text-base font-bold text-amber-700 mb-6">Chào bé! Hôm nay bé muốn thử sức với bao nhiêu bài toán?</p>
+
+        <div class="grid grid-cols-2 gap-3.5 w-full mb-6">
+            <button onclick="startGame(5)" class="bg-sky-100 hover:bg-sky-200 text-sky-900 border-2 border-sky-400 font-black py-4 rounded-2xl text-lg sm:text-xl shadow-md active:scale-95 transition flex flex-col items-center gap-1">
+                <span class="text-2xl">🌱</span>
+                <span>5 Bài</span>
+                <span class="text-[11px] font-bold text-sky-700">Khởi động nhẹ</span>
+            </button>
+            <button onclick="startGame(10)" class="bg-amber-100 hover:bg-amber-200 text-amber-950 border-2 border-amber-400 font-black py-4 rounded-2xl text-lg sm:text-xl shadow-md active:scale-95 transition flex flex-col items-center gap-1">
+                <span class="text-2xl">⭐</span>
+                <span>10 Bài</span>
+                <span class="text-[11px] font-bold text-amber-700">Vừa sức bé</span>
+            </button>
+            <button onclick="startGame(15)" class="bg-orange-100 hover:bg-orange-200 text-orange-950 border-2 border-orange-400 font-black py-4 rounded-2xl text-lg sm:text-xl shadow-md active:scale-95 transition flex flex-col items-center gap-1">
+                <span class="text-2xl">🔥</span>
+                <span>15 Bài</span>
+                <span class="text-[11px] font-bold text-orange-700">Chăm chỉ</span>
+            </button>
+            <button onclick="startGame(20)" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border-2 border-emerald-400 font-black py-4 rounded-2xl text-lg sm:text-xl shadow-md active:scale-95 transition flex flex-col items-center gap-1">
+                <span class="text-2xl">🏆</span>
+                <span>20 Bài</span>
+                <span class="text-[11px] font-bold text-emerald-700">Siêu cao thủ</span>
+            </button>
+        </div>
+
+        <div class="text-[12px] font-bold text-amber-800/80 bg-amber-50 px-4 py-2 rounded-xl border border-amber-200 w-full flex items-center justify-center gap-2">
+            <span>💡 Bé bấm vào loa để nghe chú Cáo đọc bài nhé!</span>
+        </div>
+    </div>
+
+
+    <!-- 2. MÀN HÌNH CHƠI CHÍNH (GAMEPLAY SCREEN) -->
+    <div id="screen-game" class="w-full max-w-2xl flex flex-col items-center gap-3.5 hidden">
+        
+        <!-- Header & Tiến độ bài học -->
+        <header class="w-full flex items-center justify-between bg-white px-5 py-3 rounded-3xl shadow-sm border border-amber-200">
+            <div class="flex items-center gap-3">
+                <div id="mascot" class="text-4xl transition-transform duration-300 hover:scale-125 cursor-pointer" onclick="replayCurrentVoice()">🦊</div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span id="quiz-progress-text" class="text-xs sm:text-sm font-black text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">Bài 1 / 10</span>
+                        <button onclick="replayCurrentVoice()" class="text-xs bg-amber-200/70 hover:bg-amber-300 text-amber-900 px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5" title="Đọc lại lời chú Cáo">
+                            <span>🔊 Nghe lại</span>
+                        </button>
+                    </div>
+                    <p id="mascot-dialog" class="text-xs sm:text-sm font-extrabold text-amber-600 mt-0.5">Bé hãy tự suy nghĩ xem nên tách số thế nào nhé!</p>
+                </div>
+            </div>
+            <button onclick="quitToHome()" class="bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-2xl text-xs transition shadow-sm">
+                Thoát 🏠
+            </button>
+        </header>
+
+        <!-- Thanh Progress Bar mượt mà -->
+        <div class="w-full bg-amber-200/60 rounded-full h-3 border border-amber-300 overflow-hidden">
+            <div id="progress-bar-fill" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 10%;"></div>
+        </div>
+
+        <!-- Main Game Board -->
+        <main class="w-full bg-white rounded-3xl p-5 sm:p-6 shadow-xl border-4 border-amber-200 flex flex-col items-center gap-4">
+            
+            <!-- Huy hiệu 2 bước -->
+            <div class="flex items-center gap-2 text-xs font-black text-amber-700 bg-amber-50 px-4 py-1.5 rounded-full border border-amber-200">
+                <span id="badge-step-1" class="px-3 py-1 rounded-full bg-amber-500 text-white shadow-sm">Bước 1: Tách số bù 10</span>
+                <span>➔</span>
+                <span id="badge-step-2" class="px-3 py-1 rounded-full bg-amber-200 text-amber-800">Bước 2: Tự tính kết quả</span>
+            </div>
+
+            <!-- Khung đề bài & sơ đồ tách -->
+            <div class="w-full flex flex-col items-center gap-4 bg-amber-50/70 p-4 sm:p-5 rounded-2xl border-2 border-amber-200 min-h-[190px] justify-center relative">
+                
+                <!-- Hàng 1: Phép tính A + B = ? -->
+                <div class="flex items-center gap-3 sm:gap-4">
+                    <!-- Số A (Cần bù) -->
+                    <div class="flex flex-col items-center">
+                        <div id="num-a" class="w-16 h-16 sm:w-20 sm:h-20 bg-sky-500 text-white flex items-center justify-center rounded-2xl text-3xl sm:text-4xl font-black shadow-md border-b-4 border-sky-700">7</div>
+                        <span id="label-need-ten" class="text-[11px] font-black text-sky-700 mt-1">Cần thêm ?</span>
+                    </div>
+
+                    <div class="text-3xl sm:text-4xl font-black text-amber-900 pb-5">+</div>
+
+                    <!-- Số B (Bé phải tự tách thành 2 nhánh) -->
+                    <div class="flex flex-col items-center">
+                        <div id="num-b" class="w-16 h-16 sm:w-20 sm:h-20 bg-orange-500 text-white flex items-center justify-center rounded-2xl text-3xl sm:text-4xl font-black shadow-md border-b-4 border-orange-700">8</div>
+                        <span class="text-[11px] font-black text-orange-700 mt-1">Bé tách số này 👇</span>
+                    </div>
+
+                    <div class="text-3xl sm:text-4xl font-black text-amber-900 pb-5">=</div>
+
+                    <!-- Ô kết quả cuối cùng - Bé phải tự điền ở Bước 2 -->
+                    <div class="flex flex-col items-center">
+                        <div id="drop-result" class="w-16 h-16 sm:w-20 sm:h-20 bg-white border-3 border-dashed border-amber-400 text-amber-700 flex items-center justify-center rounded-2xl text-3xl sm:text-4xl font-black shadow-inner cursor-pointer transition hover:bg-amber-100/50">
+                            ?
+                        </div>
+                        <span class="text-[11px] font-black text-amber-700 mt-1">Kết quả</span>
+                    </div>
+                </div>
+
+                <!-- Sơ đồ rẽ nhánh để bé tự chọn 2 số vào -->
+                <div id="tree-branch-area" class="w-full flex flex-col items-center pt-1 border-t border-dashed border-amber-200">
+                    <div class="text-xs sm:text-sm font-extrabold text-amber-800 mb-1.5">
+                        Nhánh tách của số <span id="label-num-b-branch" class="text-orange-600 font-black">8</span>:
+                    </div>
+
+                    <div class="flex items-center justify-center gap-3 sm:gap-6">
+                        <!-- Nhánh 1: Số bù để tròn 10 cho A -->
+                        <div class="flex flex-col items-center">
+                            <div id="drop-part-1" class="drop-zone w-14 h-14 sm:w-16 sm:h-16 bg-white border-3 border-dashed border-sky-400 text-sky-600 flex items-center justify-center rounded-2xl text-2xl sm:text-3xl font-black shadow-inner cursor-pointer transition hover:scale-105">
+                                ?
+                            </div>
+                            <span class="text-[10px] sm:text-[11px] font-bold text-sky-700 mt-1">Bù với A thành 10</span>
+                        </div>
+
+                        <div class="text-2xl font-black text-amber-800 mb-4">+</div>
+
+                        <!-- Nhánh 2: Phần còn lại của B -->
+                        <div class="flex flex-col items-center">
+                            <div id="drop-part-2" class="drop-zone w-14 h-14 sm:w-16 sm:h-16 bg-white border-3 border-dashed border-orange-400 text-orange-600 flex items-center justify-center rounded-2xl text-2xl sm:text-3xl font-black shadow-inner cursor-pointer transition hover:scale-105">
+                                ?
+                            </div>
+                            <span class="text-[10px] sm:text-[11px] font-bold text-orange-700 mt-1">Phần còn lại</span>
+                        </div>
+                    </div>
+
+                    <!-- Nút kiểm tra phần tách của bé -->
+                    <div class="mt-3.5 flex gap-2">
+                        <button id="btn-check-split" class="bg-sky-500 hover:bg-sky-600 text-white font-black px-5 py-2 rounded-2xl text-sm shadow-md active:scale-95 transition">
+                            Kiểm Tra Tách Số ✔️
+                        </button>
+                        <button id="btn-reset-slots" class="bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold px-3 py-2 rounded-2xl text-xs transition">
+                            Chọn lại ↺
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Cầu nối bắc cầu 10 sau khi bé tách đúng -->
+                <div id="hint-bridge" class="w-full bg-emerald-100/90 border border-emerald-300 rounded-xl p-2.5 text-center hidden">
+                    <span class="text-xs sm:text-sm font-extrabold text-emerald-900">
+                        💡 Đã tròn 10! Giờ bé tự nhẩm: <span id="math-bridge-text" class="font-black text-base text-emerald-700">10 + 5 = ?</span> rồi kéo số vào ô kết quả nhé!
+                    </span>
+                </div>
+
+            </div>
+
+            <!-- Hướng dẫn tương tác -->
+            <div id="guide-box" class="w-full text-center">
+                <p id="guide-text" class="text-xs sm:text-sm font-bold text-amber-900">
+                    👉 Hãy kéo các số từ khay bên dưới vào 2 ô trống để tách số hợp lý!
+                </p>
+            </div>
+
+            <!-- KHAY SỐ ĐỂ BÉ KÉO THẢ HOẶC CHẠM CHỌN -->
+            <div class="w-full flex flex-col items-center gap-1.5">
+                <span class="text-[11px] font-black text-amber-800 tracking-wider">KHAY SỐ CỦA BÉ (KÉO HOẶC CHẠM VÀO SỐ):</span>
+                
+                <!-- Hàng số nhỏ (1 - 9) cho việc tách -->
+                <div id="digit-palette" class="flex flex-wrap justify-center gap-2"></div>
+
+                <!-- Hàng kết quả lớn (11 - 18) xuất hiện ở bước 2 -->
+                <div id="result-palette" class="flex flex-wrap justify-center gap-2 hidden mt-1"></div>
+            </div>
+
+        </main>
+    </div>
+
+
+    <!-- 3. MÀN HÌNH TỔNG KẾT KẾT QUẢ (SUMMARY SCREEN) -->
+    <div id="screen-summary" class="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border-4 border-amber-300 flex flex-col items-center text-center my-auto hidden transition-all duration-300">
+        <div id="summary-badge-icon" class="text-6xl sm:text-7xl mb-2 animate-bounce cursor-pointer" onclick="replaySummaryVoice()">🏆</div>
+        <h2 class="text-2xl sm:text-3xl font-black text-amber-950 mb-1">HOAN HÔ BÉ!</h2>
+        <p id="summary-subtext" class="text-sm sm:text-base font-bold text-amber-700 mb-4">Bé đã hoàn thành xuất sắc bài luyện tập!</p>
+
+        <!-- Đánh giá sao -->
+        <div id="summary-stars" class="text-4xl sm:text-5xl mb-4 tracking-widest text-amber-400">
+            ⭐⭐⭐
+        </div>
+
+        <!-- Bảng thống kê số liệu -->
+        <div class="w-full bg-amber-50 rounded-2xl p-4 border border-amber-200 mb-6 flex justify-around items-center">
+            <div class="flex flex-col items-center">
+                <span class="text-xs font-extrabold text-amber-700">Tổng số câu</span>
+                <span id="stat-total" class="text-2xl font-black text-amber-950">10</span>
+            </div>
+            <div class="h-8 w-px bg-amber-200"></div>
+            <div class="flex flex-col items-center">
+                <span class="text-xs font-extrabold text-emerald-700">Đúng ngay</span>
+                <span id="stat-first-try" class="text-2xl font-black text-emerald-600">10</span>
+            </div>
+            <div class="h-8 w-px bg-amber-200"></div>
+            <div class="flex flex-col items-center">
+                <span class="text-xs font-extrabold text-sky-700">Tỷ lệ đúng</span>
+                <span id="stat-rate" class="text-2xl font-black text-sky-600">100%</span>
+            </div>
+        </div>
+
+        <!-- Lời khen sư phạm -->
+        <p id="summary-praise" class="text-sm font-extrabold text-amber-900 bg-emerald-50 border border-emerald-300 px-4 py-3 rounded-2xl mb-6 w-full">
+            🌟 Kỹ năng làm tròn 10 của bé quá đỉnh! Bé tính nhẩm rất nhanh và chính xác!
+        </p>
+
+        <div class="flex gap-3 w-full">
+            <button onclick="restartSameQuiz()" class="flex-1 bg-amber-100 hover:bg-amber-200 text-amber-900 font-black py-3 rounded-2xl text-sm transition shadow-sm active:scale-95">
+                Chơi lại ↺
+            </button>
+            <button onclick="quitToHome()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-black py-3 rounded-2xl text-sm transition shadow-md active:scale-95">
+                Chọn số bài khác 🎲
+            </button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-2xl text-center text-[11px] font-bold text-amber-800/80 mt-2">
+        Mẹo tư duy: Bé hãy tự nghĩ xem số đầu cần thêm mấy để đủ 10, rồi tách từ số thứ hai ra nhé!
+    </footer>
+
+    <script>// --- HỆ THỐNG ÂM THANH & NHẠC NỀN SYNTHESIS ---
+class SoundSynth {
+    constructor() {
+        this.ctx = null;
+        this.bgmTimer = null;
+        this.isBgmPlaying = false;
+        this.bgmStep = 0;
+        // Giai điệu BGM vui nhộn, êm dịu cho bé (thang âm Đô trưởng ngũ cung: C - D - E - G - A)
+        this.bgmNotes = [
+            523.25, 587.33, 659.25, 783.99, 880.00, 783.99, 659.25, 587.33,
+            523.25, 659.25, 783.99, 880.00, 1046.50, 880.00, 783.99, 659.25
+        ];
+    }
+
+    init() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    playPick() {
+        if (!audioSettings.soundFx) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(350, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(500, this.ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+    }
+
+    playWrong() {
+        if (!audioSettings.soundFx) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(260, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(180, this.ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+    }
+
+    playCorrectSplit() {
+        if (!audioSettings.soundFx) return;
+        this.init();
+        const notes = [523.25, 659.25, 783.99];
+        notes.forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.07);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.07);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.07 + 0.2);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + idx * 0.07);
+            osc.stop(this.ctx.currentTime + idx * 0.07 + 0.2);
+        });
+    }
+
+    playTriumph() {
+        if (!audioSettings.soundFx) return;
+        this.init();
+        const melody = [523.25, 659.25, 783.99, 1046.50];
+        melody.forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.08);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.08 + 0.25);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + idx * 0.08);
+            osc.stop(this.ctx.currentTime + idx * 0.08 + 0.25);
+        });
+    }
+
+    playGrandFinale() {
+        if (!audioSettings.soundFx) return;
+        this.init();
+        const fanfare = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+        fanfare.forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.1);
+            gain.gain.setValueAtTime(0.25, this.ctx.currentTime + idx * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.1 + 0.4);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + idx * 0.1);
+            osc.stop(this.ctx.currentTime + idx * 0.1 + 0.4);
+        });
+    }
+
+    // --- BỘ PHÁT NHẠC NỀN TỰ SINH (SYNTH BGM) ---
+    startBGM() {
+        if (this.isBgmPlaying) return;
+        this.init();
+        this.isBgmPlaying = true;
+        this.bgmStep = 0;
+        this.tickBGM();
+    }
+
+    stopBGM() {
+        this.isBgmPlaying = false;
+        if (this.bgmTimer) {
+            clearTimeout(this.bgmTimer);
+            this.bgmTimer = null;
+        }
+    }
+
+    tickBGM() {
+        if (!this.isBgmPlaying || !audioSettings.bgm) return;
+        this.init();
+
+        const freq = this.bgmNotes[this.bgmStep % this.bgmNotes.length];
+        this.bgmStep++;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        
+        // Nhạc nền êm dịu, âm lượng nhẹ (0.04) để không át giọng nói
+        gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.35);
+
+        this.bgmTimer = setTimeout(() => this.tickBGM(), 350); // Nhịp lặp đều đặn vui tươi
+    }
+}
+
+const sounds = new SoundSynth();
+
+// --- CẤU HÌNH BẬT TẮT ÂM THANH & GIỌNG NÓI ---
+const audioSettings = {
+    voice: true,
+    bgm: true,
+    soundFx: true
+};
+
+// --- HỆ THỐNG GIỌNG ĐỌC TIẾNG VIỆT (WEB SPEECH SYNTHESIS) ---
+let lastSpokenText = '';
+
+// Chuẩn hóa văn bản tiếng Việt để tránh engine TTS của iOS/Android đọc sai từ (đọc "bé" thành "bớ", v.v.)
+function sanitizeVietnamesePhonetics(text) {
+    if (!text) return '';
+    let s = text;
+    // Trong JavaScript Regex, \b không hiểu ký tự tiếng Việt Unicode có dấu 'é'.
+    // Ta sử dụng Unicode word boundary chuẩn để thay thế triệt để chữ "bé" hoặc "Bé":
+    s = s.replace(/(^|[^a-zA-ZÀ-ỹ0-9])(Bé)(?=[^a-zA-ZÀ-ỹ0-9]|$)/g, '$1Bạn nhỏ');
+    s = s.replace(/(^|[^a-zA-ZÀ-ỹ0-9])(bé)(?=[^a-zA-ZÀ-ỹ0-9]|$)/g, '$1bạn nhỏ');
+    // Xử lý các cụm từ xưng hô đặc biệt
+    s = s.replace(/bạn nhỏ ơi/gi, 'bạn ơi');
+    return s;
+}
+
+function speakText(text) {
+    if (!audioSettings.voice) return;
+    lastSpokenText = text;
+
+    if (!('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel(); // Dừng câu cũ nếu đang đọc
+
+    // Chuẩn hóa từ ngữ thân thiện để phát âm chuẩn xác không bị ngọng thành "bớ"
+    const cleanText = sanitizeVietnamesePhonetics(text);
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'vi-VN';
+    utterance.rate = 0.95; // Tốc độ vừa phải, dễ nghe cho bạn nhỏ lớp 1
+    utterance.pitch = 1.05; // Cao độ tự nhiên, trong trẻo
+
+    // Ưu tiên chọn giọng đọc tiếng Việt chất lượng cao (Siri / Google / Mai / Linh)
+    const voices = window.speechSynthesis.getVoices();
+    const viVoice = voices.find(v => v.lang.toLowerCase().includes('vi') || v.lang.toLowerCase().includes('vie'));
+    if (viVoice) {
+        utterance.voice = viVoice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+}
+
+window.replayCurrentVoice = function() {
+    if (lastSpokenText) {
+        speakText(lastSpokenText);
+    }
+};
+
+window.replaySummaryVoice = function() {
+    const praise = document.getElementById('summary-praise').textContent;
+    speakText(`Hoan hô bé! Bé đã hoàn thành xuất sắc bài tập! ${praise}`);
+};
+
+// --- CÁC HÀM TOGGLE ÂM THANH ---
+window.toggleVoice = function() {
+    audioSettings.voice = !audioSettings.voice;
+    const icon = document.getElementById('voice-icon');
+    const label = document.getElementById('voice-label');
+    if (audioSettings.voice) {
+        icon.textContent = '🔊';
+        label.textContent = 'Giọng đọc: Bật';
+        speakText('Đã bật giọng đọc');
+    } else {
+        icon.textContent = '🔇';
+        label.textContent = 'Giọng đọc: Tắt';
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    }
+    sounds.playPick();
+};
+
+window.toggleBGM = function() {
+    audioSettings.bgm = !audioSettings.bgm;
+    const icon = document.getElementById('bgm-icon');
+    const label = document.getElementById('bgm-label');
+    if (audioSettings.bgm) {
+        icon.textContent = '🎵';
+        label.textContent = 'Nhạc nền: Bật';
+        sounds.startBGM();
+    } else {
+        icon.textContent = '🔇';
+        label.textContent = 'Nhạc nền: Tắt';
+        sounds.stopBGM();
+    }
+    sounds.playPick();
+};
+
+// --- STATE QUẢN LÝ PHIÊN HỌC & TIẾN ĐỘ ---
+let session = {
+    totalProblems: 10,
+    currentIndex: 0,
+    firstTryCorrectCount: 0,
+    currentProblemHadMistake: false
+};
+
+let state = {
+    numA: 7,
+    numB: 8,
+    neededForTen: 3,
+    remainForTen: 5,
+    finalSum: 15,
+    step: 1,
+    userPart1: null,
+    userPart2: null,
+    userFinal: null
+};
+
+// DOM References
+const screenStart = document.getElementById('screen-start');
+const screenGame = document.getElementById('screen-game');
+const screenSummary = document.getElementById('screen-summary');
+
+const quizProgressText = document.getElementById('quiz-progress-text');
+const progressBarFill = document.getElementById('progress-bar-fill');
+const mascot = document.getElementById('mascot');
+const mascotDialog = document.getElementById('mascot-dialog');
+const numAElement = document.getElementById('num-a');
+const numBElement = document.getElementById('num-b');
+const labelNeedTen = document.getElementById('label-need-ten');
+const labelNumBBranch = document.getElementById('label-num-b-branch');
+const dropPart1 = document.getElementById('drop-part-1');
+const dropPart2 = document.getElementById('drop-part-2');
+const dropResult = document.getElementById('drop-result');
+const btnCheckSplit = document.getElementById('btn-check-split');
+const btnResetSlots = document.getElementById('btn-reset-slots');
+const hintBridge = document.getElementById('hint-bridge');
+const mathBridgeText = document.getElementById('math-bridge-text');
+const guideText = document.getElementById('guide-text');
+const digitPalette = document.getElementById('digit-palette');
+const resultPalette = document.getElementById('result-palette');
+const badgeStep1 = document.getElementById('badge-step-1');
+const badgeStep2 = document.getElementById('badge-step-2');
+
+// Summary DOM
+const summaryStars = document.getElementById('summary-stars');
+const summaryBadgeIcon = document.getElementById('summary-badge-icon');
+const summarySubtext = document.getElementById('summary-subtext');
+const summaryPraise = document.getElementById('summary-praise');
+const statTotal = document.getElementById('stat-total');
+const statFirstTry = document.getElementById('stat-first-try');
+const statRate = document.getElementById('stat-rate');
+
+// --- ĐIỀU HƯỚNG MÀN HÌNH ---
+window.startGame = function(totalCount) {
+    sounds.playPick();
+    if (audioSettings.bgm) {
+        sounds.startBGM();
+    }
+
+    session.totalProblems = totalCount;
+    session.currentIndex = 0;
+    session.firstTryCorrectCount = 0;
+
+    screenStart.classList.add('hidden');
+    screenSummary.classList.add('hidden');
+    screenGame.classList.remove('hidden');
+
+    loadNextProblem();
+};
+
+window.quitToHome = function() {
+    sounds.playPick();
+    sounds.stopBGM();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+    screenGame.classList.add('hidden');
+    screenSummary.classList.add('hidden');
+    screenStart.classList.remove('hidden');
+};
+
+window.restartSameQuiz = function() {
+    sounds.playPick();
+    window.startGame(session.totalProblems);
+};
+
+// --- SINH BÀI TOÁN & TIẾN TRÌNH ---
+function loadNextProblem() {
+    session.currentProblemHadMistake = false;
+
+    let a, b, sum;
+    do {
+        a = Math.floor(Math.random() * 4) + 6;
+        b = Math.floor(Math.random() * 8) + 2;
+        sum = a + b;
+    } while (sum <= 10 || sum >= 20 || (10 - a) >= b);
+
+    state.numA = a;
+    state.numB = b;
+    state.neededForTen = 10 - a;
+    state.remainForTen = b - state.neededForTen;
+    state.finalSum = sum;
+    state.step = 1;
+    state.userPart1 = null;
+    state.userPart2 = null;
+    state.userFinal = null;
+
+    renderBoard();
+
+    // Giọng nói đọc bài toán cho bé
+    const introSpeech = `Bài ${session.currentIndex + 1}. Phép tính: ${state.numA} cộng ${state.numB}. Bé hãy suy nghĩ xem nên tách ${state.numB} thế nào nhé!`;
+    speakText(introSpeech);
+}
+
+function renderBoard() {
+    quizProgressText.textContent = `Bài ${session.currentIndex + 1} / ${session.totalProblems}`;
+    const progressPercent = ((session.currentIndex) / session.totalProblems) * 100;
+    progressBarFill.style.width = `${progressPercent}%`;
+
+    numAElement.textContent = state.numA;
+    numBElement.textContent = state.numB;
+    labelNeedTen.textContent = `Cần thêm ${state.neededForTen} để tròn 10`;
+    labelNumBBranch.textContent = state.numB;
+
+    resetDropZone(dropPart1);
+    resetDropZone(dropPart2);
+    resetDropZone(dropResult);
+
+    dropResult.textContent = '?';
+    dropResult.className = "w-16 h-16 sm:w-20 sm:h-20 bg-white border-3 border-dashed border-amber-400 text-amber-700 flex items-center justify-center rounded-2xl text-3xl sm:text-4xl font-black shadow-inner cursor-not-allowed";
+
+    hintBridge.classList.add('hidden');
+    btnCheckSplit.classList.remove('hidden');
+
+    badgeStep1.className = "px-3 py-1 rounded-full bg-amber-500 text-white shadow-sm";
+    badgeStep2.className = "px-3 py-1 rounded-full bg-amber-200 text-amber-800";
+
+    mascot.textContent = '🦊';
+    mascot.classList.remove('mascot-wiggle');
+    mascotDialog.textContent = `Bài ${session.currentIndex + 1}: ${state.numA} + ${state.numB}. Bé hãy suy nghĩ xem nên tách ${state.numB} thế nào nhé!`;
+    guideText.innerHTML = `👉 Bé hãy kéo (hoặc chạm chọn) số để tách <span class="text-orange-600 font-black">${state.numB}</span> sao cho có 1 số bù với <span class="text-sky-600 font-black">${state.numA}</span> thành 10!`;
+
+    renderDigitPalette();
+    resultPalette.classList.add('hidden');
+}
+
+function resetDropZone(el) {
+    el.textContent = '?';
+    el.classList.remove('slot-filled', 'slot-wrong');
+}
+
+// Khay số 1 - 9
+function renderDigitPalette() {
+    digitPalette.innerHTML = '';
+    for (let i = 1; i <= 9; i++) {
+        const pill = document.createElement('div');
+        pill.className = "draggable-pill w-11 h-11 sm:w-12 sm:h-12 bg-amber-100 hover:bg-amber-200 text-amber-900 border-2 border-amber-300 flex items-center justify-center rounded-2xl text-xl sm:text-2xl font-black cursor-grab shadow-sm";
+        pill.textContent = i;
+        pill.setAttribute('draggable', 'true');
+        pill.dataset.value = i;
+
+        pill.addEventListener('dragstart', (e) => {
+            sounds.playPick();
+            e.dataTransfer.setData('text/plain', i);
+            pill.classList.add('dragging');
+        });
+
+        pill.addEventListener('dragend', () => pill.classList.remove('dragging'));
+
+        pill.addEventListener('click', () => {
+            sounds.playPick();
+            handlePillTap(i);
+        });
+
+        digitPalette.appendChild(pill);
+    }
+}
+
+// Khay kết quả 11 - 19
+function renderResultPalette() {
+    resultPalette.innerHTML = '';
+    resultPalette.classList.remove('hidden');
+    for (let i = 11; i <= 19; i++) {
+        const pill = document.createElement('div');
+        pill.className = "draggable-pill w-11 h-11 sm:w-12 sm:h-12 bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border-2 border-emerald-400 flex items-center justify-center rounded-2xl text-lg sm:text-xl font-black cursor-grab shadow-sm";
+        pill.textContent = i;
+        pill.setAttribute('draggable', 'true');
+        pill.dataset.value = i;
+
+        pill.addEventListener('dragstart', (e) => {
+            sounds.playPick();
+            e.dataTransfer.setData('text/plain', i);
+            pill.classList.add('dragging');
+        });
+
+        pill.addEventListener('dragend', () => pill.classList.remove('dragging'));
+
+        pill.addEventListener('click', () => {
+            sounds.playPick();
+            if (state.step === 2) {
+                fillSlot(dropResult, i);
+                checkFinalResult();
+            }
+        });
+
+        resultPalette.appendChild(pill);
+    }
+}
+
+function handlePillTap(val) {
+    if (state.step === 1) {
+        if (state.userPart1 === null) {
+            fillSlot(dropPart1, val);
+            state.userPart1 = val;
+        } else if (state.userPart2 === null) {
+            fillSlot(dropPart2, val);
+            state.userPart2 = val;
+        }
+    }
+}
+
+function fillSlot(slotEl, value) {
+    slotEl.textContent = value;
+    slotEl.classList.remove('slot-wrong');
+    slotEl.classList.add('slot-filled');
+}
+
+function setupDropZone(el, onDropValue) {
+    el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        el.classList.add('drop-hover');
+    });
+
+    el.addEventListener('dragleave', () => el.classList.remove('drop-hover'));
+
+    el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.classList.remove('drop-hover');
+        const val = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        if (!isNaN(val)) {
+            sounds.playPick();
+            onDropValue(val);
+        }
+    });
+
+    el.addEventListener('click', () => {
+        if (el.textContent !== '?') {
+            sounds.playPick();
+            resetDropZone(el);
+            if (el === dropPart1) state.userPart1 = null;
+            if (el === dropPart2) state.userPart2 = null;
+            if (el === dropResult) state.userFinal = null;
+        }
+    });
+}
+
+setupDropZone(dropPart1, (val) => {
+    fillSlot(dropPart1, val);
+    state.userPart1 = val;
+});
+
+setupDropZone(dropPart2, (val) => {
+    fillSlot(dropPart2, val);
+    state.userPart2 = val;
+});
+
+setupDropZone(dropResult, (val) => {
+    if (state.step === 2) {
+        fillSlot(dropResult, val);
+        state.userFinal = val;
+        checkFinalResult();
+    }
+});
+
+// --- BƯỚC 1: KIỂM TRA PHẦN TÁCH SỐ ---
+btnCheckSplit.addEventListener('click', () => {
+    if (state.userPart1 === null || state.userPart2 === null) {
+        sounds.playWrong();
+        mascot.textContent = '🤔';
+        mascotDialog.textContent = 'Bé chưa điền đủ 2 số kìa, bé điền nốt nhé!';
+        speakText('Bé chưa điền đủ hai số kìa, bé điền nốt nhé!');
+        return;
+    }
+
+    const p1 = state.userPart1;
+    const p2 = state.userPart2;
+
+    if (p1 + p2 !== state.numB) {
+        session.currentProblemHadMistake = true;
+        sounds.playWrong();
+        dropPart1.classList.add('slot-wrong');
+        dropPart2.classList.add('slot-wrong');
+        mascot.textContent = '🧐';
+        mascotDialog.textContent = `Ôi, ${p1} + ${p2} = ${p1 + p2}, chưa bằng ${state.numB} rồi. Bé thử tính lại nhé!`;
+        speakText(`Ôi, ${p1} cộng ${p2} bằng ${p1 + p2}, chưa bằng ${state.numB} rồi. Bé thử tính lại nhé!`);
+        return;
+    }
+
+    if (state.numA + p1 !== 10) {
+        session.currentProblemHadMistake = true;
+        sounds.playWrong();
+        dropPart1.classList.add('slot-wrong');
+        mascot.textContent = '💡';
+        mascotDialog.textContent = `Tách được ${state.numB} rồi nhưng ${state.numA} cộng với ${p1} chưa tròn 10. ${state.numA} cần thêm mấy để đủ 10 nhỉ?`;
+        speakText(`${state.numA} cộng với ${p1} chưa tròn 10. ${state.numA} cần thêm mấy để đủ 10 nhỉ?`);
+        return;
+    }
+
+    // Tách đúng!
+    sounds.playCorrectSplit();
+    state.step = 2;
+
+    mascot.textContent = '🥳';
+    mascot.classList.add('mascot-wiggle');
+    mascotDialog.textContent = `Xuất sắc! Bé đã tách đúng: ${state.numB} = ${p1} + ${p2}!`;
+
+    badgeStep1.className = "px-3 py-1 rounded-full bg-emerald-500 text-white shadow-sm";
+    badgeStep2.className = "px-3 py-1 rounded-full bg-amber-500 text-white shadow-sm";
+
+    btnCheckSplit.classList.add('hidden');
+    hintBridge.classList.remove('hidden');
+    mathBridgeText.textContent = `10 + ${p2} = ?`;
+
+    dropResult.className = "w-16 h-16 sm:w-20 sm:h-20 bg-white border-3 border-dashed border-amber-500 text-amber-700 flex items-center justify-center rounded-2xl text-3xl sm:text-4xl font-black shadow-lg cursor-pointer transition animate-bounce";
+
+    guideText.innerHTML = `🌟 Bé đã gom được <b>${state.numA} + ${p1} = 10</b>. Bây giờ bé hãy tự nhẩm: <b class="text-emerald-700 font-black">10 + ${p2}</b> bằng bao nhiêu rồi kéo vào ô kết quả nhé!`;
+
+    speakText(`Xuất sắc! Đã gom tròn 10 rồi! Bây giờ bé tự nhẩm xem, 10 cộng ${p2} bằng bao nhiêu nhé!`);
+
+    renderResultPalette();
+});
+
+btnResetSlots.addEventListener('click', () => {
+    sounds.playPick();
+    resetDropZone(dropPart1);
+    resetDropZone(dropPart2);
+    state.userPart1 = null;
+    state.userPart2 = null;
+    mascotDialog.textContent = 'Bé hãy chọn cặp số mới để tách nhé!';
+});
+
+// --- BƯỚC 2: KIỂM TRA ĐÁP ÁN CUỐI CÙNG & CHUYỂN BÀI / KẾT THÚC ---
+function checkFinalResult() {
+    const entered = parseInt(dropResult.textContent, 10);
+    if (isNaN(entered)) return;
+
+    if (entered === state.finalSum) {
+        sounds.playTriumph();
+        dropResult.className = "w-16 h-16 sm:w-20 sm:h-20 bg-emerald-500 border-4 border-emerald-600 text-white flex items-center justify-center rounded-2xl text-3xl sm:text-4xl font-black shadow-xl";
+
+        if (!session.currentProblemHadMistake) {
+            session.firstTryCorrectCount++;
+        }
+
+        mascot.textContent = '🎉';
+        mascot.classList.add('mascot-wiggle');
+        mascotDialog.textContent = `CHÍNH XÁC! ${state.numA} + ${state.numB} = ${state.finalSum}!`;
+
+        guideText.innerHTML = `🌟 <b>Rất giỏi!</b> Đang chuẩn bị bài tiếp theo...`;
+        badgeStep2.className = "px-3 py-1 rounded-full bg-emerald-500 text-white shadow-sm";
+
+        session.currentIndex++;
+        progressBarFill.style.width = `${(session.currentIndex / session.totalProblems) * 100}%`;
+
+        speakText(`Chính xác! ${state.numA} cộng ${state.numB} bằng ${state.finalSum}! Bé làm siêu quá!`);
+
+        setTimeout(() => {
+            if (session.currentIndex < session.totalProblems) {
+                loadNextProblem();
+            } else {
+                showSummaryScreen();
+            }
+        }, 2200);
+
+    } else {
+        session.currentProblemHadMistake = true;
+        sounds.playWrong();
+        dropResult.classList.add('slot-wrong');
+        mascot.textContent = '🥺';
+        mascotDialog.textContent = `Chưa đúng rồi bé ơi! Lấy 10 cộng thêm ${state.userPart2} sẽ bằng mấy nhỉ? Bé thử lại nhé!`;
+        speakText(`Chưa đúng rồi bé ơi! Lấy 10 cộng thêm ${state.userPart2} sẽ bằng mấy nhỉ?`);
+    }
+}
+
+// --- MÀN HÌNH TỔNG KẾT ---
+function showSummaryScreen() {
+    sounds.playGrandFinale();
+    screenGame.classList.add('hidden');
+    screenSummary.classList.remove('hidden');
+
+    statTotal.textContent = session.totalProblems;
+    statFirstTry.textContent = session.firstTryCorrectCount;
+    const rate = Math.round((session.firstTryCorrectCount / session.totalProblems) * 100);
+    statRate.textContent = `${rate}%`;
+
+    let praiseSpeech = '';
+    if (rate >= 90) {
+        summaryStars.textContent = '⭐⭐⭐';
+        summaryBadgeIcon.textContent = '🏆';
+        summarySubtext.textContent = 'Bé là Siêu Cao Thủ Tách Số Bù 10!';
+        summaryPraise.textContent = '🌟 Xuất sắc tuyệt đối! Khả năng nhẩm tròn 10 của bé quá nhanh và chuẩn xác!';
+        praiseSpeech = 'Hoan hô bé! Bé đạt 3 sao xuất sắc! Khả năng tính nhẩm của bé quá đỉnh!';
+    } else if (rate >= 60) {
+        summaryStars.textContent = '⭐⭐';
+        summaryBadgeIcon.textContent = '🎖️';
+        summarySubtext.textContent = 'Bé làm rất tốt, chỉ cần chú ý xíu nữa thôi!';
+        summaryPraise.textContent = '👏 Bé đã nắm rất vững cách tách số bù 10. Tiếp tục phát huy nhé!';
+        praiseSpeech = 'Bé làm rất tốt! Bé đã nắm vững cách tách số rồi đấy!';
+    } else {
+        summaryStars.textContent = '⭐';
+        summaryBadgeIcon.textContent = '🌱';
+        summarySubtext.textContent = 'Bé đã cố gắng hết mình!';
+        summaryPraise.textContent = '💪 Cố gắng thêm chút nữa nhé bé ơi! Cứ nhớ: gom cho đủ 10 trước rồi cộng phần dư là ra ngay!';
+        praiseSpeech = 'Bé đã cố gắng rất nhiều! Lần sau bé nhớ gom đủ 10 trước là sẽ làm đúng ngay nhé!';
+    }
+
+    setTimeout(() => {
+        speakText(praiseSpeech);
+    }, 400);
+}
+</script>
+</body>
+</html>
