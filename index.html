@@ -649,10 +649,13 @@ window.restartSameQuiz = function() {
 function loadNextProblem() {
     session.currentProblemHadMistake = false;
 
+    // Số đầu tiên A lấy ngẫu nhiên trong khoảng [2, 9] (quy tắc: mã cũ chỉ cho A từ 6→9, nay mở rộng về 2→9)
+    // Số thứ hai B trong khoảng [2, 9]. Điều kiện giữ nguyên: tổng trong khoảng 11→19
+    // và B phải đủ lớn để bù phần A còn thiếu đến 10, đồng thời phần dư (B - bù) phải >= 1
     let a, b, sum;
     do {
-        a = Math.floor(Math.random() * 4) + 6;
-        b = Math.floor(Math.random() * 8) + 2;
+        a = Math.floor(Math.random() * 8) + 2; // A ∈ [2, 9]
+        b = Math.floor(Math.random() * 8) + 2; // B ∈ [2, 9]
         sum = a + b;
     } while (sum <= 10 || sum >= 20 || (10 - a) >= b);
 
