@@ -248,7 +248,7 @@
 
             <!-- KHAY SỐ ĐỂ BÉ KÉO THẢ HOẶC CHẠM CHỌN -->
             <div class="w-full flex flex-col items-center gap-1.5">
-                <span class="text-[11px] font-black text-amber-800 tracking-wider">KHAY SỐ CỦA BÉ (KÉO HOẶC CHẠM VÀO SỐ):</span>
+                <span id="palette-hint" class="text-[11px] font-black text-amber-800 tracking-wider">KHAY SỐ CỦA BÉ (KÉO HOẶC CHẠM VÀO SỐ):</span>
                 
                 <!-- Hàng số nhỏ (1 - 9) cho việc tách -->
                 <div id="digit-palette" class="flex flex-wrap justify-center gap-2"></div>
@@ -562,7 +562,9 @@ let session = {
     totalProblems: 10,
     currentIndex: 0,
     firstTryCorrectCount: 0,
-    currentProblemHadMistake: false
+    currentProblemHadMistake: false,
+    // "Dấu vân tay" của đề vừa ra (A*100 + B) để bảo đảm 2 câu liên tiếp không trùng nhau
+    lastProblemKey: null
 };
 
 let state = {
@@ -622,6 +624,7 @@ window.startGame = function(totalCount) {
     session.totalProblems = totalCount;
     session.currentIndex = 0;
     session.firstTryCorrectCount = 0;
+    session.lastProblemKey = null; // Reset bộ nhớ chống trùng khi bắt đầu ván mới
 
     screenStart.classList.add('hidden');
     screenSummary.classList.add('hidden');
@@ -652,12 +655,33 @@ function loadNextProblem() {
     // Số đầu tiên A lấy ngẫu nhiên trong khoảng [2, 9] (quy tắc: mã cũ chỉ cho A từ 6→9, nay mở rộng về 2→9)
     // Số thứ hai B trong khoảng [2, 9]. Điều kiện giữ nguyên: tổng trong khoảng 11→19
     // và B phải đủ lớn để bù phần A còn thiếu đến 10, đồng thời phần dư (B - bù) phải >= 1
+    //
+    // QUY TẮC CHỐNG TRÙNG: hai câu liên tiếp không được trùng cùng một phép tính.
+    // So sánh trên "dấu vân tay" của đề (cặp A+B, có tính cả chiều giao hoán B+A) để bé
+    // không gặp lại đúng bài vừa làm, tránh học vẹt. Nếu lần sinh ngẫu nhiên đầu rơi vào
+    // đúng đề cũ, ta luân phiên A <-> B để tạo phép tính khác nhưng vẫn giữ nguyên tổng,
+    // đảm bảo không còn đề nào bị trùng (không thể rơi vào vòng lặp vô hạn).
     let a, b, sum;
+    let attempts = 0;
     do {
         a = Math.floor(Math.random() * 8) + 2; // A ∈ [2, 9]
         b = Math.floor(Math.random() * 8) + 2; // B ∈ [2, 9]
+        // Đổi chiều A <-> B để đổi câu hỏi trong khi giữ nguyên tổng
+        if (attempts === 1) {
+            const tmp = a;
+            a = b;
+            b = tmp;
+        }
         sum = a + b;
-    } while (sum <= 10 || sum >= 20 || (10 - a) >= b);
+        attempts++;
+    } while (
+        (sum <= 10 || sum >= 20 || (10 - a) >= b) ||
+        (session.lastProblemKey !== null && (session.lastProblemKey === a * 100 + b || session.lastProblemKey === b * 100 + a)) &&
+        attempts < 20
+    );
+
+    // Lưu dấu vân tay đề vừa sinh để lần sau so sánh chống trùng
+    session.lastProblemKey = a * 100 + b;
 
     state.numA = a;
     state.numB = b;
@@ -705,7 +729,10 @@ function renderBoard() {
     guideText.innerHTML = `👉 Bé hãy kéo (hoặc chạm chọn) số để tách <span class="text-orange-600 font-black">${state.numB}</span> sao cho có 1 số bù với <span class="text-sky-600 font-black">${state.numA}</span> thành 10!`;
 
     renderDigitPalette();
-    resultPalette.classList.add('hidden');
+    showDigitPalette(); // Khôi phục khay 1-9, ẩn khay đáp án tổng cho bài mới
+
+    // Đưa màn hình về đầu mỗi khi sang bài mới để bé thấy đề ngay từ đầu
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function resetDropZone(el) {
@@ -744,6 +771,12 @@ function renderDigitPalette() {
 function renderResultPalette() {
     resultPalette.innerHTML = '';
     resultPalette.classList.remove('hidden');
+
+    // Bước 2: khay số dùng để tự tách số (1-9) không còn cần thiết
+    // -> ẩn bớt để toàn bộ khay đáp án tổng nằm gọn trong màn hình, bé không phải vuốt xuống.
+    digitPalette.classList.add('hidden');
+    document.getElementById('palette-hint').classList.add('hidden');
+
     for (let i = 11; i <= 19; i++) {
         const pill = document.createElement('div');
         pill.className = "draggable-pill w-11 h-11 sm:w-12 sm:h-12 bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border-2 border-emerald-400 flex items-center justify-center rounded-2xl text-lg sm:text-xl font-black cursor-grab shadow-sm";
@@ -769,6 +802,32 @@ function renderResultPalette() {
 
         resultPalette.appendChild(pill);
     }
+
+    // Tự cuộn để khay đáp án tổng nằm trong tầm mắt bé (không cần vuốt tay)
+    ensurePaletteVisible();
+}
+
+// Cuộn khay đáp án vào vùng nhìn thấy mà không cần bé tự vuốt
+function ensurePaletteVisible() {
+    // Chờ 1 nhịp để DOM kịp layout rồi mới cuộn
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            try {
+                resultPalette.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (err) {
+                // Fallback cho trình duyệt cũ không hỗ trợ object option
+                resultPalette.scrollIntoView(false);
+            }
+        }, 60);
+    });
+}
+
+// Khôi phục khay số 1-9 cho lượt chơi mới (sau khi đã ẩn ở bước 2)
+function showDigitPalette() {
+    digitPalette.classList.remove('hidden');
+    const hint = document.getElementById('palette-hint');
+    if (hint) hint.classList.remove('hidden');
+    resultPalette.classList.add('hidden');
 }
 
 function handlePillTap(val) {
