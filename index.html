@@ -314,6 +314,8 @@
 class SoundSynth {
     constructor() {
         this.ctx = null;
+        this.bgmGain = null;
+        this.currentBgmOsc = null;
         this.bgmTimer = null;
         this.isBgmPlaying = false;
         this.bgmStep = 0;
@@ -325,13 +327,36 @@ class SoundSynth {
     }
 
     init() {
-        if (!this.ctx) {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.ctx = new AudioContext();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return null;
+
+        // Tạo mới AudioContext nếu chưa có hoặc đã bị đóng ('closed')
+        if (!this.ctx || this.ctx.state === 'closed') {
+            this.ctx = new AudioCtx();
+            this.bgmGain = null;
+            this.currentBgmOsc = null;
         }
-        if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
+
+        // Tạo master GainNode riêng cho BGM để tắt tiếng tức thì mà không ảnh hưởng SFX
+        if (!this.bgmGain) {
+            this.bgmGain = this.ctx.createGain();
+            this.bgmGain.gain.setValueAtTime(this.isBgmPlaying ? 1 : 0, this.ctx.currentTime);
+            this.bgmGain.connect(this.ctx.destination);
         }
+
+        // Xử lý cả 'suspended' lẫn 'interrupted' (đặc thù iOS Safari khi có speechSynthesis/chuyển app)
+        if (this.ctx.state !== 'running' && typeof this.ctx.resume === 'function') {
+            try {
+                const resumePromise = this.ctx.resume();
+                if (resumePromise && typeof resumePromise.catch === 'function') {
+                    resumePromise.catch(() => {});
+                }
+            } catch (_) {
+                // Bỏ qua lỗi đồng bộ nếu gọi ngoài user gesture
+            }
+        }
+
+        return this.ctx;
     }
 
     playPick() {
@@ -422,11 +447,43 @@ class SoundSynth {
 
     // --- BỘ PHÁT NHẠC NỀN TỰ SINH (SYNTH BGM) ---
     startBGM() {
-        if (this.isBgmPlaying) return;
-        this.init();
+        if (this.isBgmPlaying && this.bgmTimer && this.ctx && this.ctx.state === 'running') {
+            return;
+        }
+        const ctx = this.init();
+        if (!ctx) return;
+
+        if (this.bgmTimer) {
+            clearTimeout(this.bgmTimer);
+            this.bgmTimer = null;
+        }
+
         this.isBgmPlaying = true;
         this.bgmStep = 0;
-        this.tickBGM();
+
+        if (this.bgmGain) {
+            this.bgmGain.gain.cancelScheduledValues(ctx.currentTime);
+            this.bgmGain.gain.setValueAtTime(1, ctx.currentTime);
+        }
+
+        if (ctx.state === 'running') {
+            this.tickBGM();
+        } else if (typeof ctx.resume === 'function') {
+            try {
+                const resumePromise = ctx.resume();
+                if (resumePromise && typeof resumePromise.then === 'function') {
+                    resumePromise.then(() => {
+                        if (this.isBgmPlaying && audioSettings.bgm && !this.bgmTimer) {
+                            this.tickBGM();
+                        }
+                    }).catch(() => {});
+                } else {
+                    this.tickBGM();
+                }
+            } catch (_) {
+                // Bỏ qua lỗi resume ngoài user gesture
+            }
+        }
     }
 
     stopBGM() {
@@ -435,28 +492,57 @@ class SoundSynth {
             clearTimeout(this.bgmTimer);
             this.bgmTimer = null;
         }
+        if (this.currentBgmOsc) {
+            try {
+                this.currentBgmOsc.stop();
+                this.currentBgmOsc.disconnect();
+            } catch (_) {}
+            this.currentBgmOsc = null;
+        }
+        if (this.bgmGain && this.ctx && this.ctx.state !== 'closed') {
+            try {
+                this.bgmGain.gain.cancelScheduledValues(this.ctx.currentTime);
+                this.bgmGain.gain.setValueAtTime(0, this.ctx.currentTime);
+            } catch (_) {}
+        }
     }
 
     tickBGM() {
-        if (!this.isBgmPlaying || !audioSettings.bgm) return;
-        this.init();
+        if (!this.isBgmPlaying || !audioSettings.bgm) {
+            this.bgmTimer = null;
+            return;
+        }
+        const ctx = this.init();
+        if (!ctx) {
+            this.isBgmPlaying = false;
+            this.bgmTimer = null;
+            return;
+        }
 
-        const freq = this.bgmNotes[this.bgmStep % this.bgmNotes.length];
-        this.bgmStep++;
+        if (ctx.state === 'running') {
+            const freq = this.bgmNotes[this.bgmStep % this.bgmNotes.length];
+            this.bgmStep++;
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-        
-        // Nhạc nền êm dịu, âm lượng nhẹ (0.04) để không át giọng nói
-        gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
 
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.35);
+            // Nhạc nền êm dịu, âm lượng nhẹ (0.04) để không át giọng nói
+            gain.gain.setValueAtTime(0.04, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+
+            osc.connect(gain);
+            gain.connect(this.bgmGain || ctx.destination);
+            this.currentBgmOsc = osc;
+            osc.onended = () => {
+                if (this.currentBgmOsc === osc) {
+                    this.currentBgmOsc = null;
+                }
+            };
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.35);
+        }
 
         this.bgmTimer = setTimeout(() => this.tickBGM(), 350); // Nhịp lặp đều đặn vui tươi
     }
@@ -543,15 +629,18 @@ window.toggleVoice = function() {
 
 window.toggleBGM = function() {
     audioSettings.bgm = !audioSettings.bgm;
+    const btn = document.getElementById('toggle-bgm-btn');
     const icon = document.getElementById('bgm-icon');
     const label = document.getElementById('bgm-label');
     if (audioSettings.bgm) {
-        icon.textContent = '🎵';
-        label.textContent = 'Nhạc nền: Bật';
+        if (icon) icon.textContent = '🎵';
+        if (label) label.textContent = 'Nhạc nền: Bật';
+        if (btn) btn.setAttribute('aria-pressed', 'true');
         sounds.startBGM();
     } else {
-        icon.textContent = '🔇';
-        label.textContent = 'Nhạc nền: Tắt';
+        if (icon) icon.textContent = '🔇';
+        if (label) label.textContent = 'Nhạc nền: Tắt';
+        if (btn) btn.setAttribute('aria-pressed', 'false');
         sounds.stopBGM();
     }
     sounds.playPick();
