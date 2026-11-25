@@ -319,6 +319,7 @@ class SoundSynth {
         this.bgmTimer = null;
         this.isBgmPlaying = false;
         this.bgmStep = 0;
+        this._isResuming = false;
         // Giai điệu BGM vui nhộn, êm dịu cho bé (thang âm Đô trưởng ngũ cung: C - D - E - G - A)
         this.bgmNotes = [
             523.25, 587.33, 659.25, 783.99, 880.00, 783.99, 659.25, 587.33,
@@ -326,33 +327,98 @@ class SoundSynth {
         ];
     }
 
-    init() {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    _getAudioContextClass() {
+        return window.AudioContext || window.webkitAudioContext || null;
+    }
+
+    _teardownBgmGain() {
+        if (this.bgmGain) {
+            try {
+                this.bgmGain.gain.value = 0;
+            } catch (_) {}
+            try {
+                this.bgmGain.disconnect();
+            } catch (_) {}
+            this.bgmGain = null;
+        }
+    }
+
+    _ensureBgmGain(ctx) {
+        this._teardownBgmGain();
+        this.bgmGain = ctx.createGain();
+        this.bgmGain.gain.value = 1;
+        this.bgmGain.connect(ctx.destination);
+        return this.bgmGain;
+    }
+
+    _createFreshContext() {
+        const AudioCtx = this._getAudioContextClass();
+        if (!AudioCtx) return null;
+
+        if (this.ctx && this.ctx.state !== 'closed' && typeof this.ctx.close === 'function') {
+            try {
+                const closePromise = this.ctx.close();
+                if (closePromise && typeof closePromise.catch === 'function') {
+                    closePromise.catch(() => {});
+                }
+            } catch (_) {}
+        }
+
+        this._teardownBgmGain();
+        this.currentBgmOsc = null;
+        this._isResuming = false;
+
+        const ctx = new AudioCtx();
+        ctx.onstatechange = () => {
+            if (this.ctx === ctx && ctx.state === 'running' && this.isBgmPlaying && audioSettings.bgm && !this.bgmTimer) {
+                this.tickBGM();
+            }
+        };
+        this.ctx = ctx;
+        return ctx;
+    }
+
+    _resumeContextOnce(ctx) {
+        if (!ctx || ctx.state === 'running' || typeof ctx.resume !== 'function' || this._isResuming) {
+            return null;
+        }
+        this._isResuming = true;
+        try {
+            const resumePromise = ctx.resume();
+            if (resumePromise && typeof resumePromise.then === 'function') {
+                return resumePromise.then(
+                    (res) => {
+                        if (this.ctx === ctx) this._isResuming = false;
+                        return res;
+                    },
+                    (err) => {
+                        if (this.ctx === ctx) this._isResuming = false;
+                        throw err;
+                    }
+                );
+            }
+            this._isResuming = false;
+            return null;
+        } catch (_) {
+            this._isResuming = false;
+            return null;
+        }
+    }
+
+    init({ allowResume = true } = {}) {
+        const AudioCtx = this._getAudioContextClass();
         if (!AudioCtx) return null;
 
         // Tạo mới AudioContext nếu chưa có hoặc đã bị đóng ('closed')
         if (!this.ctx || this.ctx.state === 'closed') {
-            this.ctx = new AudioCtx();
-            this.bgmGain = null;
-            this.currentBgmOsc = null;
+            this._createFreshContext();
         }
 
-        // Tạo master GainNode riêng cho BGM để tắt tiếng tức thì mà không ảnh hưởng SFX
-        if (!this.bgmGain) {
-            this.bgmGain = this.ctx.createGain();
-            this.bgmGain.gain.setValueAtTime(this.isBgmPlaying ? 1 : 0, this.ctx.currentTime);
-            this.bgmGain.connect(this.ctx.destination);
-        }
-
-        // Xử lý cả 'suspended' lẫn 'interrupted' (đặc thù iOS Safari khi có speechSynthesis/chuyển app)
-        if (this.ctx.state !== 'running' && typeof this.ctx.resume === 'function') {
-            try {
-                const resumePromise = this.ctx.resume();
-                if (resumePromise && typeof resumePromise.catch === 'function') {
-                    resumePromise.catch(() => {});
-                }
-            } catch (_) {
-                // Bỏ qua lỗi đồng bộ nếu gọi ngoài user gesture
+        // Chỉ gọi resume() 1 lần khi chưa running và được phép
+        if (allowResume && this.ctx && this.ctx.state !== 'running') {
+            const resumePromise = this._resumeContextOnce(this.ctx);
+            if (resumePromise && typeof resumePromise.catch === 'function') {
+                resumePromise.catch(() => {});
             }
         }
 
@@ -361,128 +427,170 @@ class SoundSynth {
 
     playPick() {
         if (!audioSettings.soundFx) return;
-        this.init();
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+        const ctx = this.init();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(350, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(500, this.ctx.currentTime + 0.05);
-        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+        osc.frequency.setValueAtTime(350, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.05);
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(ctx.destination);
         osc.start();
-        osc.stop(this.ctx.currentTime + 0.05);
+        osc.stop(ctx.currentTime + 0.05);
     }
 
     playWrong() {
         if (!audioSettings.soundFx) return;
-        this.init();
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+        const ctx = this.init();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(260, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(180, this.ctx.currentTime + 0.2);
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+        osc.frequency.setValueAtTime(260, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.2);
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
+        gain.connect(ctx.destination);
         osc.start();
-        osc.stop(this.ctx.currentTime + 0.2);
+        osc.stop(ctx.currentTime + 0.2);
     }
 
     playCorrectSplit() {
         if (!audioSettings.soundFx) return;
-        this.init();
+        const ctx = this.init();
+        if (!ctx) return;
         const notes = [523.25, 659.25, 783.99];
         notes.forEach((freq, idx) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.07);
-            gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.07);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.07 + 0.2);
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.07);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.07);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.07 + 0.2);
             osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(this.ctx.currentTime + idx * 0.07);
-            osc.stop(this.ctx.currentTime + idx * 0.07 + 0.2);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + idx * 0.07);
+            osc.stop(ctx.currentTime + idx * 0.07 + 0.2);
         });
     }
 
     playTriumph() {
         if (!audioSettings.soundFx) return;
-        this.init();
+        const ctx = this.init();
+        if (!ctx) return;
         const melody = [523.25, 659.25, 783.99, 1046.50];
         melody.forEach((freq, idx) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
             osc.type = 'triangle';
-            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.08);
-            gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.08);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.08 + 0.25);
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.08 + 0.25);
             osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(this.ctx.currentTime + idx * 0.08);
-            osc.stop(this.ctx.currentTime + idx * 0.08 + 0.25);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + idx * 0.08);
+            osc.stop(ctx.currentTime + idx * 0.08 + 0.25);
         });
     }
 
     playGrandFinale() {
         if (!audioSettings.soundFx) return;
-        this.init();
+        const ctx = this.init();
+        if (!ctx) return;
         const fanfare = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
         fanfare.forEach((freq, idx) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.1);
-            gain.gain.setValueAtTime(0.25, this.ctx.currentTime + idx * 0.1);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.1 + 0.4);
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.1);
+            gain.gain.setValueAtTime(0.25, ctx.currentTime + idx * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.1 + 0.4);
             osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(this.ctx.currentTime + idx * 0.1);
-            osc.stop(this.ctx.currentTime + idx * 0.1 + 0.4);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + idx * 0.1);
+            osc.stop(ctx.currentTime + idx * 0.1 + 0.4);
         });
     }
 
     // --- BỘ PHÁT NHẠC NỀN TỰ SINH (SYNTH BGM) ---
     startBGM() {
-        if (this.isBgmPlaying && this.bgmTimer && this.ctx && this.ctx.state === 'running') {
+        if (this.isBgmPlaying && this.bgmTimer && this.ctx && this.ctx.state === 'running' && this.bgmGain) {
             return;
         }
-        const ctx = this.init();
+
+        // Trên iOS Safari, nếu AudioContext đang bị 'interrupted' hoặc 'closed',
+        // tạo mới AudioContext ngay trong user gesture để cấp lại audio session sạch
+        let ctx = this.ctx;
+        if (!ctx || ctx.state === 'closed' || ctx.state === 'interrupted') {
+            ctx = this._createFreshContext();
+        }
         if (!ctx) return;
 
         if (this.bgmTimer) {
             clearTimeout(this.bgmTimer);
             this.bgmTimer = null;
         }
+        if (this.currentBgmOsc) {
+            try {
+                this.currentBgmOsc.stop();
+                this.currentBgmOsc.disconnect();
+            } catch (_) {}
+            this.currentBgmOsc = null;
+        }
 
         this.isBgmPlaying = true;
         this.bgmStep = 0;
 
-        if (this.bgmGain) {
-            this.bgmGain.gain.cancelScheduledValues(ctx.currentTime);
-            this.bgmGain.gain.setValueAtTime(1, ctx.currentTime);
-        }
+        // Luôn tạo GainNode mới với gain.value = 1 (không dùng setValueAtTime/cancelScheduledValues)
+        this._ensureBgmGain(ctx);
 
         if (ctx.state === 'running') {
             this.tickBGM();
-        } else if (typeof ctx.resume === 'function') {
-            try {
-                const resumePromise = ctx.resume();
-                if (resumePromise && typeof resumePromise.then === 'function') {
-                    resumePromise.then(() => {
-                        if (this.isBgmPlaying && audioSettings.bgm && !this.bgmTimer) {
-                            this.tickBGM();
-                        }
-                    }).catch(() => {});
-                } else {
-                    this.tickBGM();
+            return;
+        }
+
+        const resumePromise = this._resumeContextOnce(ctx);
+        if (resumePromise && typeof resumePromise.then === 'function') {
+            resumePromise.then(() => {
+                if (!this.isBgmPlaying || !audioSettings.bgm) return;
+                if (this.ctx !== ctx) return;
+                if (ctx.state === 'running') {
+                    if (!this.bgmGain) this._ensureBgmGain(ctx);
+                    if (!this.bgmTimer) this.tickBGM();
+                    return;
                 }
-            } catch (_) {
-                // Bỏ qua lỗi resume ngoài user gesture
-            }
+                // Fallback khi resume() resolve nhưng iOS Safari vẫn giữ suspended/interrupted
+                const freshCtx = this._createFreshContext();
+                if (!freshCtx) return;
+                this._ensureBgmGain(freshCtx);
+                if (freshCtx.state === 'running') {
+                    this.tickBGM();
+                } else {
+                    const p2 = this._resumeContextOnce(freshCtx);
+                    if (p2 && typeof p2.then === 'function') {
+                        p2.then(() => {
+                            if (this.isBgmPlaying && audioSettings.bgm && this.ctx === freshCtx && freshCtx.state === 'running' && !this.bgmTimer) {
+                                this.tickBGM();
+                            }
+                        }).catch(() => {});
+                    }
+                }
+            }).catch(() => {
+                if (!this.isBgmPlaying || !audioSettings.bgm) return;
+                const freshCtx = this._createFreshContext();
+                if (freshCtx) {
+                    this._ensureBgmGain(freshCtx);
+                    if (freshCtx.state === 'running' && !this.bgmTimer) {
+                        this.tickBGM();
+                    }
+                }
+            });
+        } else if (ctx.state === 'running' && !this.bgmTimer) {
+            this.tickBGM();
         }
     }
 
@@ -499,12 +607,8 @@ class SoundSynth {
             } catch (_) {}
             this.currentBgmOsc = null;
         }
-        if (this.bgmGain && this.ctx && this.ctx.state !== 'closed') {
-            try {
-                this.bgmGain.gain.cancelScheduledValues(this.ctx.currentTime);
-                this.bgmGain.gain.setValueAtTime(0, this.ctx.currentTime);
-            } catch (_) {}
-        }
+        // Disconnect và null hóa bgmGain, tuyệt đối không dùng AudioParam timeline
+        this._teardownBgmGain();
     }
 
     tickBGM() {
@@ -512,14 +616,17 @@ class SoundSynth {
             this.bgmTimer = null;
             return;
         }
-        const ctx = this.init();
-        if (!ctx) {
+        const ctx = this.ctx;
+        if (!ctx || ctx.state === 'closed') {
             this.isBgmPlaying = false;
             this.bgmTimer = null;
             return;
         }
 
         if (ctx.state === 'running') {
+            if (!this.bgmGain) {
+                this._ensureBgmGain(ctx);
+            }
             const freq = this.bgmNotes[this.bgmStep % this.bgmNotes.length];
             this.bgmStep++;
 
@@ -533,7 +640,7 @@ class SoundSynth {
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
 
             osc.connect(gain);
-            gain.connect(this.bgmGain || ctx.destination);
+            gain.connect(this.bgmGain);
             this.currentBgmOsc = osc;
             osc.onended = () => {
                 if (this.currentBgmOsc === osc) {
@@ -595,6 +702,28 @@ function speakText(text) {
     if (viVoice) {
         utterance.voice = viVoice;
     }
+
+    const resumeBgmAfterSpeech = () => {
+        if (!sounds.isBgmPlaying || !audioSettings.bgm) return;
+        const ctx = sounds.ctx;
+        if (!ctx || ctx.state === 'closed') return;
+        if (ctx.state === 'running') {
+            if (!sounds.bgmGain) sounds._ensureBgmGain(ctx);
+            if (!sounds.bgmTimer) sounds.tickBGM();
+            return;
+        }
+        const p = sounds._resumeContextOnce(ctx);
+        if (p && typeof p.then === 'function') {
+            p.then(() => {
+                if (sounds.isBgmPlaying && audioSettings.bgm && sounds.ctx === ctx && ctx.state === 'running') {
+                    if (!sounds.bgmGain) sounds._ensureBgmGain(ctx);
+                    if (!sounds.bgmTimer) sounds.tickBGM();
+                }
+            }).catch(() => {});
+        }
+    };
+    utterance.onend = resumeBgmAfterSpeech;
+    utterance.onerror = resumeBgmAfterSpeech;
 
     window.speechSynthesis.speak(utterance);
 }
